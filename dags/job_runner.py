@@ -44,7 +44,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
                 "mongo_db": extra["mongo_db"],
                 "batch_id": extra["batch_id"],
                 "job_id": extra["job_id"],
-                "query_limit": int(extra["mongo_job_ids_query_limit"]),
+                "query_limit": extra["mongo_job_ids_query_limit"],
         }
         jobs.append(job)
         print(f"[get_runnable_job_ids] job: {job}")
@@ -103,7 +103,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
         {"batch_id": 1, "job_id": 1}
     ).sort("started_at", 1)
     return [{"mongo_uri": extra_mongo_uri, "mongo_db": extra_mongo_db,
-             "mongo_job_ids_query_limit": extra_mongo_job_ids_query_limit,
+             "mongo_job_ids_query_limit": int(extra_mongo_job_ids_query_limit),
              "batch_id": j["batch_id"], "job_id": j["job_id"]}
             for j in job_cursor]
 
@@ -112,7 +112,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
 def claim_and_generate_waves(job_ref: Dict) -> List[Dict]:
     """Claims the job and INFERS the SKUs to process from the job_ids collection."""
     bid, jid, mongo_uri, mongo_db = job_ref["batch_id"], job_ref["job_id"], job_ref["mongo_uri"], job_ref["mongo_db"]
-    mongo_job_ids_query_limit = int(job_ref["mongo_job_ids_query_limit"])
+    mongo_job_ids_query_limit = job_ref["mongo_job_ids_query_limit"]
     db = _db(mongo_uri, mongo_db)
     job_doc = db.jobs.find_one({"batch_id": bid, "job_id": jid}, {"status": 1})
     job_status = job_doc.get("status", 1)
