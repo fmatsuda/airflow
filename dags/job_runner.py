@@ -44,7 +44,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
                 "mongo_db": extra["mongo_db"],
                 "batch_id": extra["batch_id"],
                 "job_id": extra["job_id"],
-                "query_limit": extra["mongo_job_ids_query_limit"],
+                "query_limit": int(extra["mongo_job_ids_query_limit"]),
         }
         jobs.append(job)
         print(f"[get_runnable_job_ids] job: {job}")
