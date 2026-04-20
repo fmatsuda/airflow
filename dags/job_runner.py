@@ -148,7 +148,7 @@ def claim_and_generate_waves(job_ref: Dict) -> List[Dict]:
     batch_size = int(job_doc.get("batch_size", 1)) if job_doc else 1
     print(f"[claim_and_generate_waves] batch: {bid}, id: {jid}, status: {job_status}, batch_size: {batch_size}")
 
-    from dags.utils.chunking import chunk_list
+    from utils.chunking import chunk_list
     waves = chunk_list(specs, batch_size)
     print(f"[claim_and_generate_waves] batch: waves: {waves}")
 
@@ -261,7 +261,7 @@ def process_wave(work_unit: Dict, pool: str):
                 # Apply DEFAULT timeout if none provided
                 timeout = api.get("timeout") or 10
                 # (Your execute_api logic should consume this timeout)
-                from dags.utils.http_executor import execute_api
+                from utils.http_executor import execute_api
                 execute_api({**api, "timeout": timeout}, bid, jid, sku_id)
 
             db.job_ids.update_one(
@@ -448,7 +448,7 @@ def finalize_job(job_ref: Dict):
                 }
                 print(f"[finalize] Full payload: {full_payload}")
                 try:
-                    from dags.utils.http_executor import execute_api
+                    from utils.http_executor import execute_api
                     action["url"] = target
                     action["json"] = full_payload
                     print(f"[finalize] Sending API Callback to: {target}")
