@@ -25,6 +25,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
     event_map = context.get('triggering_asset_events', {})
     # 2. Check for the Mongo Asset specifically
     mongo_events = context.get('triggering_asset_events', {}).get(MONGO_ASSET)
+    print(f"[get_runnable_job_ids] mongo_events: {mongo_events}")
     if not mongo_events:
         raise AirflowSkipException("No triggering Mongo events")
 
