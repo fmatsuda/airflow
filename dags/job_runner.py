@@ -25,7 +25,6 @@ def get_runnable_job_ids(**context) -> List[Dict]:
     event_map = context.get('triggering_asset_events', {})
     # 2. Check for the Mongo Asset specifically
     mongo_events = context.get('triggering_asset_events', {}).get(MONGO_ASSET)
-    print(f"[get_runnable_job_ids] mongo_events: {mongo_events}")
     if not mongo_events:
         raise AirflowSkipException("No triggering Mongo events")
 
@@ -104,7 +103,7 @@ def get_runnable_job_ids(**context) -> List[Dict]:
         {"batch_id": 1, "job_id": 1}
     ).sort("started_at", 1)
     return [{"mongo_uri": extra_mongo_uri, "mongo_db": extra_mongo_db,
-             "mongo_job_ids_query_limit": int(extra_mongo_job_ids_query_limit),
+             "mongo_job_ids_query_limit": extra_mongo_job_ids_query_limit,
              "batch_id": j["batch_id"], "job_id": j["job_id"]}
             for j in job_cursor]
 
@@ -114,11 +113,11 @@ def claim_and_generate_waves(job_ref: Dict) -> List[Dict]:
     """Claims the job and INFERS the SKUs to process from the job_ids collection."""
     bid, jid, mongo_uri, mongo_db = job_ref["batch_id"], job_ref["job_id"], job_ref["mongo_uri"], job_ref["mongo_db"]
     mongo_job_ids_query_limit = job_ref["mongo_job_ids_query_limit"]
-    print(f"[claim_and_generate_waves] batch: {bid}, id: {jid}, mongo_job_ids_query_limit: {mongo_job_ids_query_limit}")
     db = _db(mongo_uri, mongo_db)
     job_doc = db.jobs.find_one({"batch_id": bid, "job_id": jid}, {"status": 1})
     job_status = job_doc.get("status", 1)
-    print(f"[claim_and_generate_waves] batch: {bid}, id: {jid}, status: {job_status}")
+    print(f"[claim_and_generate_waves] batch: {bid}, id: {jid}, status: {job_status}, "
+          f"mongo_job_ids_query_limit: {mongo_job_ids_query_limit}")
 
     # 1. Atomic Claim
     res = db.jobs.update_one(
@@ -468,7 +467,7 @@ def finalize_job(job_ref: Dict):
 
 
 @dag(dag_id="job_runner", start_date=datetime(2025, 1, 1),
-     schedule=[MONGO_ASSET], catchup=False, max_active_runs=1, render_template_as_native_obj=True)
+     schedule=[MONGO_ASSET], catchup=False, max_active_runs=1)
 def job_runner():
     runnable_jobs = get_runnable_job_ids()
 
