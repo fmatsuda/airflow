@@ -1,6 +1,6 @@
 import requests
 import time
-from dags.utils.secrets import resolve_secret
+from .secrets import resolve_secret
 import random
 
 
