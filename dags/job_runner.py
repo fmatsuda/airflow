@@ -449,7 +449,7 @@ def finalize_job(job_ref: Dict):
 
 
 @dag(dag_id="job_runner", start_date=datetime(2025, 1, 1),
-     schedule=[MONGO_ASSET], catchup=False, max_active_runs=1)
+     schedule=[MONGO_ASSET], catchup=False, max_active_runs=2)
 def job_runner():
     runnable_jobs = get_runnable_job_ids()
 
