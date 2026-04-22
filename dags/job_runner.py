@@ -209,7 +209,7 @@ def get_workload(workload_string, key):
 
 
 @task_deco(
-    pool="{{ params.pool }}",
+    pool="job_runner_pool",
     max_active_tis_per_dagrun=16,
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
