@@ -191,7 +191,9 @@ def prepare_wave_config(waves: list, pools: list) -> list[dict]:
     Returns: [{'work_unit': ..., 'pool': ...}, ...]
     """
     # Standard Python zip is 100% reliable
-    return [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
+    config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
+    print(f"[prepare_wave_config] config_list: {config_list}")
+    return config_list
 
 
 @task_deco
@@ -476,6 +478,7 @@ def job_runner():
     mapped_input = prepare_wave_config(work_queue, pool_list)
 
     # 5. Fan‑out execution (dynamic pool at scheduling time)
+    print(mapped_input)
     processed = process_wave.expand_kwargs(mapped_input)
 
 
