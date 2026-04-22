@@ -191,11 +191,7 @@ def prepare_wave_config(waves: list, pools: list) -> list[dict]:
     Returns: [{'work_unit': ..., 'pool': ...}, ...]
     """
     # Standard Python zip is 100% reliable
-    return [
-        {"work_unit": w,
-         "params": {"pool": p},
-        } for w, p in zip(waves, pools)
-    ]
+    return [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
 
 
 @task_deco
@@ -209,12 +205,11 @@ def get_workload(workload_string, key):
 
 
 @task_deco(
-    pool="job_runner_pool",
     max_active_tis_per_dagrun=16,
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
 )
-def process_wave(work_unit: Dict):
+def process_wave(work_unit: Dict, pool: str):
     bid = work_unit["batch_id"]
     jid = work_unit["job_id"]
     wave = work_unit["wave"]
@@ -227,6 +222,7 @@ def process_wave(work_unit: Dict):
     #wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid[:3]}_{jid[-3:]}"
     wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid}_{jid}"
     # Note: Airflow handles the actual "slot" reservation before this function runs.
+    print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
     any_failed = False
 
     for spec in wave:
