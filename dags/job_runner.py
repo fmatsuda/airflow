@@ -204,17 +204,25 @@ def get_workload(workload_string, key):
         return None
 
 
-@task_deco(max_active_tis_per_dagrun=16, execution_timeout=timedelta(minutes=15), weight_rule="absolute")
-def process_wave(work_unit: Dict, pool: str):
-    #db = _db()
-    bid, jid, wave, mongo_uri, mongo_db = (work_unit["batch_id"], work_unit["job_id"], work_unit["wave"],
-                                           work_unit["mongo_uri"], work_unit["mongo_db"])
+@task_deco(
+    pool="{{ params.pool }}",
+    max_active_tis_per_dagrun=16,
+    execution_timeout=timedelta(minutes=15),
+    weight_rule="absolute",
+)
+def process_wave(work_unit: Dict):
+    bid = work_unit["batch_id"]
+    jid = work_unit["job_id"]
+    wave = work_unit["wave"]
+    mongo_uri = work_unit["mongo_uri"]
+    mongo_db = work_unit["mongo_db"]
+
+    print("[process_wave] Running with pool resolved at scheduling time.")
     db = _db(mongo_uri, mongo_db)
     # Unique Wave ID for visibility in Mongo
     #wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid[:3]}_{jid[-3:]}"
     wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid}_{jid}"
     # Note: Airflow handles the actual "slot" reservation before this function runs.
-    print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
     any_failed = False
 
     for spec in wave:
@@ -449,34 +457,51 @@ def finalize_job(job_ref: Dict):
 
 
 @dag(dag_id="job_runner", start_date=datetime(2025, 1, 1),
-     schedule=[MONGO_ASSET], catchup=False, max_active_runs=2)
+     schedule=[MONGO_ASSET], catchup=False, max_active_runs=4)
 def job_runner():
     runnable_jobs = get_runnable_job_ids()
 
     # 1. Expand jobs into waves
     nested_waves = claim_and_generate_waves.expand(job_ref=runnable_jobs)
 
-    # 2. Flatten for the worker queue
+    # 2. Flatten for the worker queue (Normalize nested mapping)
     work_queue = flatten_queue(nested_waves)
 
     # 3. Get dynamic routing data
     workload = analyze_workload(work_queue)
     pool_list = get_workload(workload, "pools")
 
-    # 4. Process waves (Parallel) to avoid the cross-product
+    # 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
     mapped_input = prepare_wave_config(work_queue, pool_list)
 
     # Use expand_kwargs to map the zipped pairs (mapped_input) to avoid cartesian cross-product
     # cartesian cross-product: (number of work_unit) X (number of pool_list)
     # this statement: processed = process_wave.expand(work_unit=work_queue, pool=pool_list)
     # creates a cross-product issue
-    processed = process_wave.expand_kwargs(mapped_input)
+    # also, this change:
+    # processed = process_wave.expand_kwargs(mapped_input)
+    # forces dynamic pool per wave:
+    # need to review:
 
-    # 5. Finalize (Fan-in)
+    # 5. Fan‑out execution (dynamic pool at scheduling time)
+    processed = process_wave.expand_kwargs(
+        [
+            {
+                "work_unit": item["work_unit"],
+                "params": {"pool": item["pool"]},
+            }
+            for item in mapped_input
+        ]
+    )
+
+
+    # 6. Finalize (Fan-in)
     # 'processed >>' is used to ensure the finalizer waits for ALL process_wave instances
-    finalizer = finalize_job.expand(job_ref=runnable_jobs)
+    #finalizer = finalize_job.expand(job_ref=runnable_jobs)
 
-    var = processed >> finalizer
+    #var = processed >> finalizer
+
+    finalize_job.expand(job_ref=runnable_jobs).set_upstream(processed)
 
 
 job_runner()
