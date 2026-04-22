@@ -191,7 +191,11 @@ def prepare_wave_config(waves: list, pools: list) -> list[dict]:
     Returns: [{'work_unit': ..., 'pool': ...}, ...]
     """
     # Standard Python zip is 100% reliable
-    return [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
+    return [
+        {"work_unit": w,
+         "params": {"pool": p},
+        } for w, p in zip(waves, pools)
+    ]
 
 
 @task_deco
@@ -472,27 +476,11 @@ def job_runner():
     pool_list = get_workload(workload, "pools")
 
     # 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
+    # cartesian cross-product: (number of work_unit) X (number of pool_list)
     mapped_input = prepare_wave_config(work_queue, pool_list)
 
-    # Use expand_kwargs to map the zipped pairs (mapped_input) to avoid cartesian cross-product
-    # cartesian cross-product: (number of work_unit) X (number of pool_list)
-    # this statement: processed = process_wave.expand(work_unit=work_queue, pool=pool_list)
-    # creates a cross-product issue
-    # also, this change:
-    # processed = process_wave.expand_kwargs(mapped_input)
-    # forces dynamic pool per wave:
-    # need to review:
-
     # 5. Fan‑out execution (dynamic pool at scheduling time)
-    processed = process_wave.expand_kwargs(
-        [
-            {
-                "work_unit": item["work_unit"],
-                "params": {"pool": item["pool"]},
-            }
-            for item in mapped_input
-        ]
-    )
+    processed = process_wave.expand_kwargs(mapped_input)
 
 
     # 6. Finalize (Fan-in)
