@@ -20,65 +20,44 @@ def _db(mongo_uri, mongo_db):
 
 
 @task_deco
-def get_runnable_job_ids(**context) -> List[Dict]:
-    # 1. Get the full map of triggering events
-    event_map = context.get('triggering_asset_events', {})
-    # 2. Check for the Mongo Asset specifically
-    mongo_events = context.get('triggering_asset_events', {}).get(MONGO_ASSET)
+def get_runnable_job_ids(**context) -> list[dict]:
+    event_map = context.get("triggering_asset_events", {})
+    mongo_events = event_map.get(MONGO_ASSET)
+
     if not mongo_events:
         raise AirflowSkipException("No triggering Mongo events")
 
-    required_set = {'mongo_uri', 'mongo_db', 'mongo_job_ids_query_limit', 'batch_id', 'job_id'}
-    # 3. Iterate through events (there could be multiple if queued)
-    jobs: List[dict] = []
-    for event in mongo_events:
-        # 4. Retrieve the 'extra' dictionary passed via API
-        extra = event.extra or {}
-        missing = required_set - extra.keys()
-        if missing:
-            print(f"[get_runnable_job_ids] Missing event keys: {missing}")
-            raise AirflowFailException(f"Validation Failed: missing key in extra {missing}")
+    # Validate and extract job info from asset event
+    event = mongo_events[0]
+    extra = event.extra or {}
 
-        job = {
-                "mongo_uri": extra["mongo_uri"],
-                "mongo_db": extra["mongo_db"],
-                "batch_id": extra["batch_id"],
-                "job_id": extra["job_id"],
-                "query_limit": extra["mongo_job_ids_query_limit"],
-        }
-        jobs.append(job)
-        print(f"[get_runnable_job_ids] job: {job}")
+    required = {
+        "mongo_uri",
+        "mongo_db",
+        "mongo_job_ids_query_limit",
+        "batch_id",
+        "job_id",
+    }
+    missing = required - extra.keys()
+    if missing:
+        raise AirflowFailException(f"Missing event keys: {missing}")
 
+    mongo_uri = extra["mongo_uri"]
+    mongo_db = extra["mongo_db"]
+    bid = extra["batch_id"]
+    jid = extra["job_id"]
+    query_limit = extra["mongo_job_ids_query_limit"]
 
-    # claim ownership once per run
-    first = jobs[0]
-    extra_mongo_uri = first['mongo_uri']
-    extra_mongo_db = first['mongo_db']
-    extra_mongo_job_ids_query_limit = first['query_limit']
+    db = _db(mongo_uri, mongo_db)
 
-    db = _db(extra_mongo_uri, extra_mongo_db)
     now = datetime.now(timezone.utc)
     stale_threshold = now - timedelta(minutes=5)
-    # 1. IDENTIFY THE DATABASE
-    db_name = db.name
-    coll_names = db.list_collection_names()
 
-    # 2. PROBE THE JOBS COLLECTION
-    total_in_coll = db.jobs.count_documents({})
-    all_statuses = db.jobs.distinct("status")
-
-    # 3. PRINT FOR LOGS
-    print(f"--- AIRFLOW MONGO PROBE ---")
-    print(f"Target Database: {db_name}")
-    print(f"Collections Found: {coll_names}")
-    print(f"Total Documents in 'jobs': {total_in_coll}")
-    print(f"Unique Statuses: {all_statuses}")
-    print(f"---------------------------")
-
-    # ATOMIC RECOVERY & CLAIM:
-    # Grab 'created' jobs OR 'running' jobs that have timed out
-    res = db.jobs.update_many(
+    # ✅ STRICTLY SCOPED CLAIM (ONE JOB ONLY)
+    res = db.jobs.update_one(
         {
+            "batch_id": bid,
+            "job_id": jid,
             "$or": [
                 {"status": "created"},
                 {
@@ -87,25 +66,28 @@ def get_runnable_job_ids(**context) -> List[Dict]:
                 }
             ]
         },
-        {"$set": {
-            "status": "claimed",
-            "last_heartbeat": now,
-            "claimed_by_dag_run": context['dag_run'].run_id
-        }, "$currentDate": {"updated_at": True}}
+        {
+            "$set": {
+                "status": "claimed",
+                "last_heartbeat": now,
+                "claimed_by_dag_run": context["dag_run"].run_id
+            },
+            "$currentDate": {"updated_at": True}
+        }
     )
 
     if res.modified_count == 0:
-        raise AirflowSkipException("No new or stale jobs found.")
+        raise AirflowSkipException(
+            f"Job {bid}/{jid} not eligible for claim"
+        )
 
-    # Fetch the batch / job IDs for processing
-    job_cursor = db.jobs.find(
-        {"status": "claimed", "claimed_by_dag_run": context['dag_run'].run_id},
-        {"batch_id": 1, "job_id": 1}
-    ).sort("started_at", 1)
-    return [{"mongo_uri": extra_mongo_uri, "mongo_db": extra_mongo_db,
-             "mongo_job_ids_query_limit": extra_mongo_job_ids_query_limit,
-             "batch_id": j["batch_id"], "job_id": j["job_id"]}
-            for j in job_cursor]
+    return [{
+        "mongo_uri": mongo_uri,
+        "mongo_db": mongo_db,
+        "mongo_job_ids_query_limit": query_limit,
+        "batch_id": bid,
+        "job_id": jid
+    }]
 
 
 @task_deco
