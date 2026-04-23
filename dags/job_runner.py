@@ -472,26 +472,29 @@ def job_runner():
     # 2. Flatten for the worker queue (Normalize nested mapping)
     work_queue = flatten_queue(nested_waves)
 
-    # 3. Get dynamic routing data
-    workload = analyze_workload(work_queue)
-    pool_list = get_workload(workload, "pools")
+    # pools cannot be adjusted dynamically  start---->
+    ## 3. Get dynamic routing data
+    #workload = analyze_workload(work_queue)
+    #pool_list = get_workload(workload, "pools")
 
-    # 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
-    # cartesian cross-product: (number of work_unit) X (number of pool_list)
-    mapped_input = prepare_wave_config(work_queue, pool_list)
+    ## 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
+    ## cartesian cross-product: (number of work_unit) X (number of pool_list)
+    #mapped_input = prepare_wave_config(work_queue, pool_list)
 
-    # 5. Fan‑out execution (dynamic pool at scheduling time)
-    print(mapped_input)
-    processed = process_wave.expand_kwargs(mapped_input)
-    #processed = process_wave.override(pool=mapped_input["pools"][0]).expand(work_unit=mapped_input["work_units"])
+    ## 5. Fan‑out execution (dynamic pool at scheduling time)
+    #print(mapped_input)
+    #processed = process_wave.expand_kwargs(mapped_input)
+    # pools cannot be adjusted dynamically  <---- end
 
+    # 3. Fan‑out execution (static pool)
+    processed = process_wave.expand(work_unit=work_queue)
 
     # 6. Finalize (Fan-in)
     # 'processed >>' is used to ensure the finalizer waits for ALL process_wave instances
     #finalizer = finalize_job.expand(job_ref=runnable_jobs)
-
     #var = processed >> finalizer
 
+    # 4. Finalize (Fan-in)
     finalize_job.expand(job_ref=runnable_jobs).set_upstream(processed)
 
 
