@@ -214,7 +214,7 @@ def get_workload(workload_string, key):
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
 )
-def process_wave(work_unit: Dict, pool: str):
+def process_wave(work_unit: Dict, pool: str=""):
     bid = work_unit["batch_id"]
     jid = work_unit["job_id"]
     wave = work_unit["wave"]
