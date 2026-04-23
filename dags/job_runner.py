@@ -194,7 +194,7 @@ def prepare_wave_config(waves: list, pools: list) -> Dict[str, List]:  # -> List
     #config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
     #print(f"[prepare_wave_config] config_list: {config_list}")
     #return config_list
-    return {"work_unit": waves, "pools": pools}
+    return {"work_units": waves, "pools": pools}
 
 
 @task_deco
@@ -481,7 +481,7 @@ def job_runner():
     # 5. Fan‑out execution (dynamic pool at scheduling time)
     print(mapped_input)
     #processed = process_wave.expand_kwargs(mapped_input)
-    processed = process_wave.expand(work_unit=mapped_input["work_unit"], pool=mapped_input["pools"])
+    processed = process_wave.override(pool=mapped_input["pools"]).expand(work_unit=mapped_input["work_units"])
 
 
     # 6. Finalize (Fan-in)
