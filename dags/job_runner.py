@@ -185,15 +185,16 @@ def analyze_workload(work_queue: List[Dict]) -> str:
 
 
 @task_deco
-def prepare_wave_config(waves: list, pools: list) -> list[dict]:
+def prepare_wave_config(waves: list, pools: list) -> Dict[str, List]:  # -> List[Dict]:
     """
     Standard Python zip to pair 8 waves with 8 pools.
     Returns: [{'work_unit': ..., 'pool': ...}, ...]
     """
     # Standard Python zip is 100% reliable
-    config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
-    print(f"[prepare_wave_config] config_list: {config_list}")
-    return config_list
+    #config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
+    #print(f"[prepare_wave_config] config_list: {config_list}")
+    #return config_list
+    return {"work_unit": waves, "pools": pools}
 
 
 @task_deco
@@ -211,7 +212,7 @@ def get_workload(workload_string, key):
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
 )
-def process_wave(work_unit: Dict, pool: str):
+def process_wave(work_unit: Dict): #, pool: str):
     bid = work_unit["batch_id"]
     jid = work_unit["job_id"]
     wave = work_unit["wave"]
@@ -224,7 +225,7 @@ def process_wave(work_unit: Dict, pool: str):
     #wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid[:3]}_{jid[-3:]}"
     wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid}_{jid}"
     # Note: Airflow handles the actual "slot" reservation before this function runs.
-    print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
+    #print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
     any_failed = False
 
     for spec in wave:
@@ -479,7 +480,8 @@ def job_runner():
 
     # 5. Fan‑out execution (dynamic pool at scheduling time)
     print(mapped_input)
-    processed = process_wave.expand_kwargs(mapped_input)
+    #processed = process_wave.expand_kwargs(mapped_input)
+    processed = process_wave.expand(work_unit=mapped_input["work_unit"], pools=mapped_input["pools"])
 
 
     # 6. Finalize (Fan-in)
