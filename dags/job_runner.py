@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 from airflow.hooks.base import BaseHook
 from airflow.sdk import dag
 from airflow.exceptions import AirflowSkipException
@@ -187,16 +187,16 @@ def analyze_workload(work_queue: List[Dict]) -> str:
 
 
 @task_deco(multiple_outputs=True)
-def prepare_wave_config(waves: list, pools: list) -> Dict[str, List]:  # -> List[Dict]:
+def prepare_wave_config(waves: list, pools: list) -> Dict[str, Any]:  # -> List[Dict]:
     """
     Standard Python zip to pair 8 waves with 8 pools.
     Returns: [{'work_unit': ..., 'pool': ...}, ...]
     """
     # Standard Python zip is 100% reliable
-    #config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
-    #print(f"[prepare_wave_config] config_list: {config_list}")
-    #return config_list
-    return {"work_units": waves, "pools": pools}
+    config_list = [{"work_unit": w, "pool": p} for w, p in zip(waves, pools)]
+    print(f"[prepare_wave_config] config_list: {config_list}")
+    return config_list
+
 
 
 @task_deco
@@ -482,8 +482,8 @@ def job_runner():
 
     # 5. Fan‑out execution (dynamic pool at scheduling time)
     print(mapped_input)
-    #processed = process_wave.expand_kwargs(mapped_input)
-    processed = process_wave.override(pool=mapped_input["pools"][0]).expand(work_unit=mapped_input["work_units"])
+    processed = process_wave.expand_kwargs(mapped_input)
+    #processed = process_wave.override(pool=mapped_input["pools"][0]).expand(work_unit=mapped_input["work_units"])
 
 
     # 6. Finalize (Fan-in)
