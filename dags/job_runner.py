@@ -481,7 +481,7 @@ def job_runner():
     # 5. Fan‑out execution (dynamic pool at scheduling time)
     print(mapped_input)
     #processed = process_wave.expand_kwargs(mapped_input)
-    processed = process_wave.expand(work_unit=mapped_input["work_unit"], pools=mapped_input["pools"])
+    processed = process_wave.expand(work_unit=mapped_input["work_unit"], pool=mapped_input["pools"])
 
 
     # 6. Finalize (Fan-in)
