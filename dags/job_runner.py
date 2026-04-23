@@ -186,7 +186,7 @@ def analyze_workload(work_queue: List[Dict]) -> str:
     return json_string
 
 
-@task_deco(multiple_outputs=True)
+@task_deco
 def prepare_wave_config(waves: list, pools: list) -> Dict[str, Any]:  # -> List[Dict]:
     """
     Standard Python zip to pair 8 waves with 8 pools.
