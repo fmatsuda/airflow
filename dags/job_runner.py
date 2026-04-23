@@ -160,6 +160,8 @@ def analyze_workload(work_queue: List[Dict]) -> str:
     pools = []
     priorities = []
 
+    print(f"[analyze_workload] work_queue: {work_queue}")
+
     for unit in work_queue:
         wave = unit.get("wave", [])
         # Total HTTP requests this specific worker will perform
@@ -184,7 +186,7 @@ def analyze_workload(work_queue: List[Dict]) -> str:
     return json_string
 
 
-@task_deco
+@task_deco(multiple_outputs=True)
 def prepare_wave_config(waves: list, pools: list) -> Dict[str, List]:  # -> List[Dict]:
     """
     Standard Python zip to pair 8 waves with 8 pools.
@@ -481,7 +483,7 @@ def job_runner():
     # 5. Fan‑out execution (dynamic pool at scheduling time)
     print(mapped_input)
     #processed = process_wave.expand_kwargs(mapped_input)
-    processed = process_wave.override(pool=mapped_input["pools"]).expand(work_unit=mapped_input["work_units"])
+    processed = process_wave.override(pool=mapped_input["pools"][0]).expand(work_unit=mapped_input["work_units"])
 
 
     # 6. Finalize (Fan-in)
