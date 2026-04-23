@@ -214,7 +214,7 @@ def get_workload(workload_string, key):
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
 )
-def process_wave(work_unit: Dict): #, pool: str):
+def process_wave(work_unit: Dict, pool: str):
     bid = work_unit["batch_id"]
     jid = work_unit["job_id"]
     wave = work_unit["wave"]
@@ -227,7 +227,7 @@ def process_wave(work_unit: Dict): #, pool: str):
     #wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid[:3]}_{jid[-3:]}"
     wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid}_{jid}"
     # Note: Airflow handles the actual "slot" reservation before this function runs.
-    #print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
+    print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
     any_failed = False
 
     for spec in wave:
