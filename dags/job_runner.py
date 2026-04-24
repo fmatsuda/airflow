@@ -210,17 +210,17 @@ def get_workload(workload_string, key):
 
 @task_deco
 def filter_for_light(mapped_input):
-    return [m for m in mapped_input if m["pool"] == "light_load_pool"]
+    return [m for m in mapped_input if m.get("pool") == "light_load_pool"]
 
 
 @task_deco
 def filter_for_standard(mapped_input):
-    return [m for m in mapped_input if m["pool"] == "standard_pool"]
+    return [m for m in mapped_input if m.get("pool") == "standard_pool"]
 
 
 @task_deco
 def filter_for_heavy(mapped_input):
-    return [m for m in mapped_input if m["pool"] == "heavy_load_pool"]
+    return [m for m in mapped_input if m.get("pool") == "heavy_load_pool"]
 
 
 @task_deco(
