@@ -221,6 +221,68 @@ def filter_for_standard(mapped_input):
 @task_deco
 def filter_for_heavy(mapped_input):
     return [m for m in mapped_input if m["pool"] == "heavy_load_pool"]
+@task_deco(max_active_tis_per_dagrun=16, execution_timeout=timedelta(minutes=15), weight_rule="absolute")
+def process_wave(work_unit: Dict, pool: str):
+    #db = _db()
+    bid, jid, wave, mongo_uri, mongo_db = (work_unit["batch_id"], work_unit["job_id"], work_unit["wave"],
+                                           work_unit["mongo_uri"], work_unit["mongo_db"])
+    db = _db(mongo_uri, mongo_db)
+    # Unique Wave ID for visibility in Mongo
+    #wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid[:3]}_{jid[-3:]}"
+    wave_id = f"wave_{datetime.now(timezone.utc).strftime('%H%M%S')}_{bid}_{jid}"
+    # Note: Airflow handles the actual "slot" reservation before this function runs.
+    print(f"[process_wave] Running in pool: {pool} with absolute weight logic.")
+    any_failed = False
+
+    for spec in wave:
+        sku_id = spec["id"]
+
+        # Update SKU status AND Job heartbeat simultaneously
+        now = datetime.now(timezone.utc)
+        res = db.job_ids.update_one(
+            {"batch_id": bid, "job_id": jid, "id": sku_id, "status": "pending"},
+            {"$set": {"status": "running", "wave_id": wave_id, "started_at": now},
+             "$currentDate": {"updated_at": True}}
+        )
+        if res.modified_count == 0:
+            print(f"Skipping batch_id: {bid}, job_id: {jid} sku_id: {sku_id} - already picked up by another worker.")
+            return
+
+        # Pulse the Job heartbeat to prevent recovery logic from stealing it
+        db.jobs.update_one(
+            {"batch_id": bid, "job_id": jid},
+            {"$set": {"last_heartbeat": now},
+             "$currentDate": {"updated_at": True}}
+        )
+
+        try:
+            for api in spec.get("apis", []):
+                # Apply DEFAULT timeout if none provided
+                timeout = api.get("timeout") or 10
+                # (Your execute_api logic should consume this timeout)
+                from dags.utils.http_executor import execute_api
+                execute_api({**api, "timeout": timeout}, bid, jid, sku_id)
+
+            db.job_ids.update_one(
+                {"batch_id": bid, "job_id": jid, "id": sku_id},
+                {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc)},
+                 "$currentDate": {"updated_at": True}}
+            )
+        except Exception as e:
+            db.job_ids.update_one(
+                {"batch_id": bid, "job_id": jid, "id": sku_id},
+                {"$set": {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc),
+                    "error": str(e)
+                }}
+            )
+            any_failed = True  # Continue the loop for remaining SKUs in wave
+
+    if any_failed:
+        raise RuntimeError(f"Wave {wave_id} in {bid}/{jid} had partial failures.")
+
+
 
 
 @task_deco(
@@ -228,7 +290,7 @@ def filter_for_heavy(mapped_input):
     execution_timeout=timedelta(minutes=15),
     weight_rule="absolute",
 )
-def process_wave(work_unit: Dict, pool: str=""):
+def process_wave_static(work_unit: Dict, pool: str=""):
     bid = work_unit["batch_id"]
     jid = work_unit["job_id"]
     wave = work_unit["wave"]
@@ -493,6 +555,7 @@ def job_runner():
     # 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
     # cartesian cross-product: (number of work_unit) X (number of pool_list)
     mapped_input = prepare_wave_config(work_queue, pool_list)
+
     light_waves = filter_for_light(mapped_input)
     standard_waves = filter_for_standard(mapped_input)
     heavy_waves = filter_for_heavy(mapped_input)
