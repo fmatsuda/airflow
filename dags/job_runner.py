@@ -198,7 +198,6 @@ def prepare_wave_config(waves: list, pools: list)  -> List[Dict]:
     return config_list
 
 
-
 @task_deco
 def get_workload(workload_string, key):
     print(f"ACTUAL workload_dict: {workload_string}")
@@ -207,6 +206,21 @@ def get_workload(workload_string, key):
         return workload_dict[key]
     else:
         return None
+
+
+@task_deco
+def filter_for_light(mapped_input):
+    return [m for m in mapped_input if m["pool"] == "light_load_pool"]
+
+
+@task_deco
+def filter_for_standard(mapped_input):
+    return [m for m in mapped_input if m["pool"] == "standard_pool"]
+
+
+@task_deco
+def filter_for_heavy(mapped_input):
+    return [m for m in mapped_input if m["pool"] == "heavy_load_pool"]
 
 
 @task_deco(
@@ -472,30 +486,36 @@ def job_runner():
     # 2. Flatten for the worker queue (Normalize nested mapping)
     work_queue = flatten_queue(nested_waves)
 
-    # pools cannot be adjusted dynamically  start---->
-    ## 3. Get dynamic routing data
-    #workload = analyze_workload(work_queue)
-    #pool_list = get_workload(workload, "pools")
+    # 3. Get dynamic routing data
+    workload = analyze_workload(work_queue)
+    pool_list = get_workload(workload, "pools")
 
-    ## 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
-    ## cartesian cross-product: (number of work_unit) X (number of pool_list)
-    #mapped_input = prepare_wave_config(work_queue, pool_list)
+    # 4. Process waves (Parallel): Zip wave + pool to avoid the cartesian cross-product
+    # cartesian cross-product: (number of work_unit) X (number of pool_list)
+    mapped_input = prepare_wave_config(work_queue, pool_list)
+    light_waves = filter_for_light(mapped_input)
+    standard_waves = filter_for_standard(mapped_input)
+    heavy_waves = filter_for_heavy(mapped_input)
 
-    ## 5. Fan‑out execution (dynamic pool at scheduling time)
-    #print(mapped_input)
-    #processed = process_wave.expand_kwargs(mapped_input)
-    # pools cannot be adjusted dynamically  <---- end
+    # 5. Fan‑out execution (dynamic pool at scheduling time)
+    processed_light = process_wave.override(pool='light_load_pool').expand_kwargs(light_waves)
+    processed_standard = process_wave.override(pool='standard_pool').expand_kwargs(standard_waves)
+    processed_heavy = process_wave.override(pool='heavy_load_pool').expand_kwargs(heavy_waves)
 
-    # 3. Fan‑out execution (static pool)
-    processed = process_wave.expand(work_unit=work_queue)
+    # Fan‑out execution (static pool only) this was before I figured out how to do dynamic wave pool
+    # For static, steps 3, 4, 5 and 6 are not needed, and instead 3A and 4A would be used instead
+    # 3A. process wave
+    # processed = process_wave.expand(work_unit=work_queue)
+    # 4A. Finalize (Fan-in)
+    # do either:
+    #   #'processed >>' is used to ensure the finalizer waits for ALL process_wave instances
+    #   finalizer = finalize_job.expand(job_ref=runnable_jobs)
+    #   var = processed >> finalizer
+    # or just do:
+    #   finalize_job.expand(job_ref=runnable_jobs).set_upstream(processed)  #static only 5A
 
     # 6. Finalize (Fan-in)
-    # 'processed >>' is used to ensure the finalizer waits for ALL process_wave instances
-    #finalizer = finalize_job.expand(job_ref=runnable_jobs)
-    #var = processed >> finalizer
-
-    # 4. Finalize (Fan-in)
-    finalize_job.expand(job_ref=runnable_jobs).set_upstream(processed)
+    finalize_job.expand(job_ref=runnable_jobs).set_upstream([processed_light, processed_standard, processed_heavy])
 
 
 job_runner()
